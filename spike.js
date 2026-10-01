@@ -1,9 +1,11 @@
 import { CONFIG } from './config.js';
+import { GETEILTE_KALENDER } from './kalender-ids.js';
 
 const SCOPES = {
   app: 'https://www.googleapis.com/auth/calendar.app.created',
   app_liste:
     'https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist.readonly',
+  abo: 'https://www.googleapis.com/auth/calendar.app.created https://www.googleapis.com/auth/calendar.calendarlist',
   events_liste:
     'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/calendar.calendarlist.readonly',
 };
@@ -180,6 +182,29 @@ $('list-cals').onclick = guarded(async () => {
     log(`${c.summary} | rolle=${c.accessRole} | selected=${c.selected ?? false} | standard-reminder=`, c.defaultReminders ?? []);
     if (key) localStorage.setItem(`fk.cal.${key}`, c.id);
   }
+});
+
+// Der Partner abonniert die geteilten Kalender direkt per API (statt über E-Mail-Links) und stellt
+// Sichtbarkeit und Standard-Benachrichtigung gleich mit ein. Braucht den Scope calendar.calendarlist.
+const ABO_EINSTELLUNGEN = {
+  termine: { selected: true, defaultReminders: [{ method: 'popup', minutes: 0 }] },
+  abwesenheit: { selected: true, defaultReminders: [] },
+  anwesenheit: { selected: false, defaultReminders: [] },
+};
+
+$('abo-cals').onclick = guarded(async () => {
+  for (const [key, id] of Object.entries(GETEILTE_KALENDER)) {
+    const einst = ABO_EINSTELLUNGEN[key];
+    let r = await api('POST', '/users/me/calendarList', { id, ...einst });
+    if (r.status === 409) r = await api('PATCH', `/users/me/calendarList/${encodeURIComponent(id)}`, einst);
+    if (r.status === 200) {
+      localStorage.setItem(`fk.cal.${key}`, id);
+      log('Abonniert:', CAL_NAMES[key], '| rolle', r.daten.accessRole, '| selected', r.daten.selected, '| reminder', r.daten.defaultReminders ?? []);
+    } else {
+      log('FEHLER beim Abonnieren:', CAL_NAMES[key], r.status, r.daten?.error?.message ?? '');
+    }
+  }
+  log('Fertig. Jetzt „Kalender auflisten“ drücken und prüfen: rolle=writer.');
 });
 
 $('delete-cals').onclick = guarded(async () => {
